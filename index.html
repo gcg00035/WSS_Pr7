@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es-ES">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        html, body, #map { height: 100%; margin: 0; padding: 0; background: #1a1a1a; }
+        #info-box { 
+            position: absolute; top: 20px; right: 20px; z-index: 1000; 
+            background: white; padding: 15px; border-radius: 8px; width: 250px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5); font-family: sans-serif;
+            font-size: 13px;
+        }
+        #status { color: #666; margin: 5px 0; }
+        .error { color: #d00; }
+        .success { color: #0a0; }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+<body>
+
+    <div id="info-box">
+        <h3 id="nombre-pais">Haz clic en un país</h3>
+        <p id="status">Esperando selección...</p>
+    </div>
+
+    <div id="map"></div>
+
+    <script type='text/javascript'>
+        var endpointUrl = 'https://query.wikidata.org/sparql';
+        var map;
+        var lineasGuerra = L.layerGroup();
+        var capaPaises;
+
+        // CONSULTA ÚNICA OPTIMIZADA
+        function queryGuerrasPorISO(codigoISO) {            
+            return `SELECT ?battle ?battleLabel ?lat ?lon
+WHERE {
+  # Obtener país por código ISO
+  ?country wdt:P297 "${codigoISO}".
+
+  # Batallas
+  ?battle wdt:P31 wd:Q178561;
+          wdt:P710 ?participant;
+          wdt:P625 ?coords.
+
+  # Participante asociado al país
+  ?participant wdt:P17 ?country.
+
+  BIND(geof:latitude(?coords) AS ?lat)
+  BIND(geof:longitude(?coords) AS ?lon)
+
+  SERVICE wikibase:label {
+    bd:serviceParam wikibase:language "es,en".
+  }
+}
+LIMIT 100`;
+        }
+
+        function makeSPARQLQuery(endpointUrl, sparqlQuery, doneCallback) {
+            console.log("📡 Consultando Wikidata...");
+            return $.ajax(endpointUrl, {
+                headers: { Accept: 'application/sparql-results+json' },
+                data: { query: sparqlQuery }
+            }).done(doneCallback)
+              .fail(function(error) {
+                  console.error("❌ Error SPARQL:", error);
+                  $('#status').html('<span class="error">Error en la consulta</span>');
+              });
+        }
+
+        function initMap() {
+            map = L.map('map').setView([20, 0], 2);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            lineasGuerra.addTo(map);
+
+            // Cargar GeoJSON con códigos ISO
+            $.getJSON('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson', function(data) {
+                console.log("✅ GeoJSON cargado. Total países:", data.features.length);
+                capaPaises = L.geoJson(data, {
+                    style: { color: "#555", weight: 1, fillOpacity: 0.2 },
+                    onEachFeature: function(feature, layer) {
+                        layer.on('click', function(e) {
+                            var iso = feature.properties.ISO_A2;
+                            var nombre = feature.properties.NAME;
+                            
+                            console.log("📍 País seleccionado - ISO:", iso, "Nombre:", nombre);
+                            
+                            if(!iso || iso === '-99') {
+                                $('#status').text("⚠️ Este país no tiene código ISO");
+                                return;
+                            }
+                            
+                            seleccionarPais(iso, nombre, e);
+                        });
+                        layer.on('mouseover', function() { this.setStyle({ fillOpacity: 0.5 }); });
+                        layer.on('mouseout', function() { this.setStyle({ fillOpacity: 0.2 }); });
+                    }
+                }).addTo(map);
+            }).fail(function(error) {
+                console.error("❌ Error cargando GeoJSON:", error);
+                $('#status').text("Error cargando el mapa");
+            });
+        }
+
+        function seleccionarPais(iso, nombre, e) {
+            $('#nombre-pais').text(nombre);
+            $('#status').text("🔍 Buscando batallas...");
+            lineasGuerra.clearLayers();
+
+            var query = queryGuerrasPorISO(iso);
+            
+            if(!query) {
+                $('#status').html('<span class="error">⚠️ País no soportado</span>');
+                console.log("⚠️ Código ISO no reconocido:", iso);
+                return;
+            }
+
+            makeSPARQLQuery(endpointUrl, query, function(data) {
+                var resultados = data.results.bindings;
+                
+                console.log("✅ Batallas encontradas:", resultados.length);
+                
+                if(resultados.length === 0) {
+                    $('#status').html('<span class="error">❌ Sin batallas geolocalizadas</span>');
+                    return;
+                }
+                
+                $('#status').html('<span class="success">✅ ' + resultados.length + ' batallas</span>');
+
+                // Obtener centro del país
+                var bounds = capaPaises.getBounds();
+                var origen = e.latlng;
+
+resultados.forEach(function(g) {
+
+    if (!g.lat || !g.lon) return;
+
+    var batalla = [
+        parseFloat(g.lat.value),
+        parseFloat(g.lon.value)
+    ];
+
+    var nombreBatalla = g.battleLabel?.value || "Batalla";
+
+    L.polyline([origen, batalla], {
+        color: '#ff4500',
+        weight: 2,
+        opacity: 0.7
+    }).addTo(lineasGuerra)
+      .bindPopup(`<b>${nombreBatalla}</b>`);
+
+    L.circleMarker(batalla, {
+        radius: 4,
+        color: 'yellow',
+        fillOpacity: 0.9
+    }).addTo(lineasGuerra);
+});
+
+                // Zoom al área de batallas
+                if(resultados.length > 0) {
+                    map.fitBounds(lineasGuerra.getBounds());
+                }
+            });
+        }
+
+        $(document).ready(initMap);
+    </script>
+</body>
+</html>
