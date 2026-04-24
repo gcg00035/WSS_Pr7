@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es-ES">
+<head>
+    <meta charset="UTF-8">
+    <title>Mapa Histórico de Batallas</title>
+
+    <!-- Estilos locales -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Librerías externas -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+<body>
+    <!-- Splash Screen de carga -->
+    <div id="splash-screen">
+        <div class="splash-container">
+            <div class="swords-animation">
+                <span class="sword left">⚔️</span>
+                <span class="splash-title">Cargando Batallas...</span>
+                <span class="sword right">⚔️</span>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Encabezado -->
+    <div id="header">
+        <h1>🗺️ Mapa Histórico de Batallas</h1>
+    </div>
+
+    <!-- Contenedor principal -->
+    <div id="main-container">
+        <!-- Caja de información y control -->
+        <div id="info-box">
+            <h3 id="nombre-pais">Haz clic en un país</h3>
+            <p id="status">⚔️ Selecciona un país para ver sus batallas...</p>
+            
+            <!-- Loader de carga animado -->
+            <div id="loader-panel" style="display:none;">
+                <div class="loader-content">
+                    <div class="swords-mini">⚔️</div>
+                    <p class="loader-text">Cargando batallas...</p>
+                </div>
+            </div>
+            
+            <!-- Listado de batallas -->
+            <div id="batallasList">
+                <h4>Batallas:</h4>
+                <ul id="batallasListado"></ul>
+            </div>
+        </div>
+
+        <!-- Mapa -->
+        <div id="map"></div>
+    </div>
+
+    <!-- Scripts locales en orden de dependencias -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
